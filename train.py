@@ -8,13 +8,11 @@ from torch import nn
 from torch import optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from pytorch_lightning import seed_everything
 
 from dataset import CLEVR, collate_data, transform
 from model import MACNetwork
 
-batch_size = 64
-n_epoch = 20
-dim = 512
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -27,8 +25,8 @@ def accumulate(model1, model2, decay=0.999):
         par1[k].data.mul_(decay).add_(1 - decay, par2[k].data)
 
 
-def train(epoch):
-    clevr = CLEVR(sys.argv[1], transform=transform)
+def train(dataset_root, net, criterion, optimizer, epoch, batch_size):
+    clevr = CLEVR(dataset_root, transform=transform)
     train_set = DataLoader(
         clevr, batch_size=batch_size, num_workers=4, collate_fn=collate_data
     )
@@ -70,21 +68,21 @@ def train(epoch):
     clevr.close()
 
 
-def valid(epoch):
-    clevr = CLEVR(sys.argv[1], 'val', transform=None)
+def valid(dataset_root, net, epoch, batch_size):
+    clevr = CLEVR(dataset_root, 'val', transform=None)
     valid_set = DataLoader(
         clevr, batch_size=batch_size, num_workers=4, collate_fn=collate_data
     )
     dataset = iter(valid_set)
 
-    net_running.train(False)
+    net.train(False)
     family_correct = Counter()
     family_total = Counter()
     with torch.no_grad():
         for image, question, q_len, answer, family in tqdm(dataset):
             image, question = image.to(device), question.to(device)
 
-            output = net_running(image, question, q_len)
+            output = net(image, question, q_len)
             correct = output.detach().argmax(1) == answer.to(device)
             for c, fam in zip(correct, family):
                 if c:
@@ -104,25 +102,39 @@ def valid(epoch):
     clevr.close()
 
 
-if __name__ == '__main__':
+def main(params):
+    seed_everything(params.seed, workers=True)
+    
     with open('data/dic.pkl', 'rb') as f:
         dic = pickle.load(f)
 
     n_words = len(dic['word_dic']) + 1
     n_answers = len(dic['answer_dic'])
 
-    net = MACNetwork(n_words, dim).to(device)
-    net_running = MACNetwork(n_words, dim).to(device)
+    net = MACNetwork(n_words, params.dim, embed_hidden=params.embed_hidden,
+        max_step=params.max_step, self_attention=params.self_attention,
+        memory_gate=params.memory_gate, classes=params.classes, dropout=params.dropout).to(device)
+    net_running = MACNetwork(n_words, params.dim, embed_hidden=params.embed_hidden,
+        max_step=params.max_step, self_attention=params.self_attention,
+        memory_gate=params.memory_gate, classes=params.classes, dropout=params.dropout).to(device)
     accumulate(net_running, net, 0)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(net.parameters(), lr=1e-4)
+    optimizer = optim.Adam(net.parameters(), lr=params.lr)
 
-    for epoch in range(n_epoch):
-        train(epoch)
-        valid(epoch)
+    for epoch in range(params.n_epoch):
+        train(params.dataset_root, net, criterion, optimizer, epoch, params.batch_size)
+        valid(params.dataset_root, net_running, epoch, params.batch_size)
 
         with open(
-            'checkpoint/checkpoint_{}.model'.format(str(epoch + 1).zfill(2)), 'wb'
+            'checkpoint/checkpoint.model', 'wb'
         ) as f:
             torch.save(net_running.state_dict(), f)
+
+
+if __name__ == '__main__':
+    from loader import Loader 
+    from arguments import parser
+    params = Loader(parser.parse_args())
+    main(params)
+    

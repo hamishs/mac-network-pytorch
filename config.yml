@@ -1,0 +1,11 @@
+main:
+  batch_size: 64
+  n_epoch: 20
+  dim: 512
+  lr: 0.0001
+  embed_hidden: 300
+  max_step: 12
+  classes: 28
+  dropout: 0.15
+  seed: 69
+
