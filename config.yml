@@ -8,4 +8,6 @@ main:
   classes: 28
   dropout: 0.15
   seed: 69
+  activation: softmax
+  wandb: none
 

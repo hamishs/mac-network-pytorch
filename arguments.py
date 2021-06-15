@@ -61,4 +61,12 @@ parser.add_argument('--dropout',
 	default=None, type=float,
 	help=''
 )
+parser.add_argument('--wandb',
+  default=None, type=str,
+  help='Wandb entity for logging.'
+)
+parser.add_argument('--activation',
+  default=None, type=str,
+  help='Softmax or sparsemax attention.'
+)
 

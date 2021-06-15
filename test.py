@@ -28,7 +28,8 @@ def main(params):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     net = MACNetwork(n_words, params.dim, embed_hidden=params.embed_hidden,
             max_step=params.max_step, self_attention=params.self_attention,
-            memory_gate=params.memory_gate, classes=params.classes, dropout=params.dropout).to(device)
+            memory_gate=params.memory_gate, classes=params.classes,
+            dropout=params.dropout, activation=params.activation).to(device)
     net.load_state_dict(torch.load(params.checkpoint_path))
     net.eval()
 

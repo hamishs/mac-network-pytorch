@@ -3,6 +3,7 @@ from torch.autograd import Variable
 from torch import nn
 from torch.nn.init import kaiming_uniform_, xavier_uniform_, normal
 import torch.nn.functional as F
+from sparsemax import Sparsemax
 
 def linear(in_dim, out_dim, bias=True):
     lin = nn.Linear(in_dim, out_dim, bias=bias)
@@ -43,12 +44,19 @@ class ControlUnit(nn.Module):
 
 
 class ReadUnit(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dim, activation='softmax'):
         super().__init__()
 
         self.mem = linear(dim, dim)
         self.concat = linear(dim * 2, dim)
         self.attn = linear(dim, 1)
+
+        if activation == 'softmax':
+            self.activ = nn.Softmax(dim=1)
+        elif activation == 'sparsemax':
+            self.activ = Sparsemax(dim=1)
+        else:
+            raise NotImplementedError
 
     def forward(self, memory, know, control):
         mem = self.mem(memory[-1]).unsqueeze(2)
@@ -56,11 +64,11 @@ class ReadUnit(nn.Module):
                                 .permute(0, 2, 1))
         attn = concat * control[-1].unsqueeze(1)
         attn = self.attn(attn).squeeze(2)
-        attn = F.softmax(attn, 1).unsqueeze(1)
+        attn = self.activ(attn).unsqueeze(1)
 
         read = (attn * know).sum(2)
 
-        return read
+        return read, attn
 
 
 class WriteUnit(nn.Module):
@@ -105,11 +113,11 @@ class WriteUnit(nn.Module):
 class MACUnit(nn.Module):
     def __init__(self, dim, max_step=12,
                 self_attention=False, memory_gate=False,
-                dropout=0.15):
+                dropout=0.15, activation='softmax'):
         super().__init__()
 
         self.control = ControlUnit(dim, max_step)
-        self.read = ReadUnit(dim)
+        self.read = ReadUnit(dim, activation=activation)
         self.write = WriteUnit(dim, self_attention, memory_gate)
 
         self.mem_0 = nn.Parameter(torch.zeros(1, dim))
@@ -146,7 +154,7 @@ class MACUnit(nn.Module):
                 control = control * control_mask
             controls.append(control)
 
-            read = self.read(memories, knowledge, controls)
+            read, _ = self.read(memories, knowledge, controls)
             memory = self.write(memories, read, controls)
             if self.training:
                 memory = memory * memory_mask
@@ -158,7 +166,7 @@ class MACUnit(nn.Module):
 class MACNetwork(nn.Module):
     def __init__(self, n_vocab, dim, embed_hidden=300,
                 max_step=12, self_attention=False, memory_gate=False,
-                classes=28, dropout=0.15):
+                classes=28, dropout=0.15, activation='softmax'):
         super().__init__()
 
         self.conv = nn.Sequential(nn.Conv2d(1024, dim, 3, padding=1),
@@ -172,7 +180,8 @@ class MACNetwork(nn.Module):
         self.lstm_proj = nn.Linear(dim * 2, dim)
 
         self.mac = MACUnit(dim, max_step,
-                        self_attention, memory_gate, dropout)
+                        self_attention, memory_gate, dropout,
+                        activation)
 
 
         self.classifier = nn.Sequential(linear(dim * 3, dim),

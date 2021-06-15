@@ -2,6 +2,7 @@ import sys
 import pickle
 from collections import Counter
 
+import wandb
 import numpy as np
 import torch
 from torch import nn
@@ -22,10 +23,11 @@ def accumulate(model1, model2, decay=0.999):
     par2 = dict(model2.named_parameters())
 
     for k in par1.keys():
-        par1[k].data.mul_(decay).add_(1 - decay, par2[k].data)
+        par1[k] = par1[k] * decay + (1. - decay) * par2[k]
 
 
-def train(dataset_root, net, criterion, optimizer, epoch, batch_size):
+def train(dataset_root, net, net_running, criterion, optimizer, epoch, batch_size,
+          log_wandb=False):
     clevr = CLEVR(dataset_root, transform=transform)
     train_set = DataLoader(
         clevr, batch_size=batch_size, num_workers=4, collate_fn=collate_data
@@ -49,7 +51,7 @@ def train(dataset_root, net, criterion, optimizer, epoch, batch_size):
         loss.backward()
         optimizer.step()
         correct = output.detach().argmax(1) == answer
-        correct = torch.tensor(correct, dtype=torch.float32).sum() / batch_size
+        correct = correct.float().sum() / batch_size
 
         if moving_loss == 0:
             moving_loss = correct
@@ -62,13 +64,15 @@ def train(dataset_root, net, criterion, optimizer, epoch, batch_size):
                 epoch + 1, loss.item(), moving_loss
             )
         )
+        if log_wandb:
+            wandb.log({'loss':loss.item(), 'acc':moving_loss})
 
         accumulate(net_running, net)
 
     clevr.close()
 
 
-def valid(dataset_root, net, epoch, batch_size):
+def valid(dataset_root, net, epoch, batch_size, log_wandb=False):
     clevr = CLEVR(dataset_root, 'val', transform=None)
     valid_set = DataLoader(
         clevr, batch_size=batch_size, num_workers=4, collate_fn=collate_data
@@ -99,11 +103,22 @@ def valid(dataset_root, net, epoch, batch_size):
         )
     )
 
+    if log_wandb:
+        wandb.log({'val_acc':sum(family_correct.values()) / sum(family_total.values())})
+
     clevr.close()
 
 
 def main(params):
     seed_everything(params.seed, workers=True)
+
+    if params.wandb != 'none':
+        wandb.init(
+            project='Sparse-VQA',
+            entity=params.wandb,
+            group='MAC',
+            config={k: v for k, v in params.__dict__.items() if isinstance(v, (float, int, str, list))}
+        )
     
     with open('data/dic.pkl', 'rb') as f:
         dic = pickle.load(f)
@@ -113,23 +128,29 @@ def main(params):
 
     net = MACNetwork(n_words, params.dim, embed_hidden=params.embed_hidden,
         max_step=params.max_step, self_attention=params.self_attention,
-        memory_gate=params.memory_gate, classes=params.classes, dropout=params.dropout).to(device)
+        memory_gate=params.memory_gate, classes=params.classes,
+        dropout=params.dropout, activation=params.activation).to(device)
     net_running = MACNetwork(n_words, params.dim, embed_hidden=params.embed_hidden,
         max_step=params.max_step, self_attention=params.self_attention,
-        memory_gate=params.memory_gate, classes=params.classes, dropout=params.dropout).to(device)
+        memory_gate=params.memory_gate, classes=params.classes,
+        dropout=params.dropout, activation=params.activation).to(device)
     accumulate(net_running, net, 0)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(net.parameters(), lr=params.lr)
 
     for epoch in range(params.n_epoch):
-        train(params.dataset_root, net, criterion, optimizer, epoch, params.batch_size)
-        valid(params.dataset_root, net_running, epoch, params.batch_size)
+        train(params.dataset_root, net, net_running, criterion, optimizer,
+              epoch, params.batch_size, log_wandb=(params.wandb!='none'))
+        valid(params.dataset_root, net_running,
+              epoch, params.batch_size, log_wandb=(params.wandb!='none'))
 
         with open(
             'checkpoint/checkpoint.model', 'wb'
         ) as f:
             torch.save(net_running.state_dict(), f)
+    
+    wandb.finish()
 
 
 if __name__ == '__main__':
