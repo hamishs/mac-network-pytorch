@@ -19,11 +19,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def accumulate(model1, model2, decay=0.999):
-    par1 = dict(model1.named_parameters())
-    par2 = dict(model2.named_parameters())
-
-    for k in par1.keys():
-        par1[k] = par1[k] * decay + (1. - decay) * par2[k]
+    for p, q in zip(model1.parameters(), model2.parameters()):
+        p.data += (1.0 - decay) * (q.data - p.data)
 
 
 def train(dataset_root, net, net_running, criterion, optimizer, epoch, batch_size,
@@ -146,7 +143,7 @@ def main(params):
               epoch, params.batch_size, log_wandb=(params.wandb!='none'))
 
         with open(
-            'checkpoint/checkpoint.model', 'wb'
+            'checkpoint/checkpoint_{}.model'.format(params.name), 'wb'
         ) as f:
             torch.save(net_running.state_dict(), f)
     

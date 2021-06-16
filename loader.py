@@ -1,4 +1,5 @@
 import yaml
+import json
 
 
 class Loader:
@@ -14,9 +15,20 @@ class Loader:
         
         combined_dict = {**config, **custom_params}
         self._generate_loader(combined_dict)
+        self.save_params()
 
     def _generate_loader(self, combined_dict):
         for key, val in combined_dict.items():
             if isinstance(val, (int, str, list, dict, float, tuple)):
                 setattr(self, key, val)
 
+    def save_params(self):
+        with open('checkpoint/params_{}.json'.format(self.name), 'w') as f:
+            json.dump(self.__dict__, f)
+
+
+def load_params(path):
+    with open(path, 'r') as f:
+        params = json.load(f)
+
+    return Loader(params)

@@ -12,11 +12,11 @@ parser.add_argument('--dataset_root',
 	required=True, type=str,
 	help='CLEVR dataset directory.'
 )
-
-parser.add_argument('--checkpoint_path',
-	default=None, type=str,
-	help='Path to model checkpoint for testing.'
+parser.add_argument('--name',
+	required=True, type=str,
+	help='Name of run.'
 )
+
 parser.add_argument('--seed',
 	default=None, type=int,
 	help='Random seed for reproducibility.'

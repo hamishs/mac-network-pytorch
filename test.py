@@ -30,7 +30,7 @@ def main(params):
             max_step=params.max_step, self_attention=params.self_attention,
             memory_gate=params.memory_gate, classes=params.classes,
             dropout=params.dropout, activation=params.activation).to(device)
-    net.load_state_dict(torch.load(params.checkpoint_path))
+    net.load_state_dict(torch.load('checkpoint/checkpoint_{}.model'.format(params.name)))
     net.eval()
 
     dataset = iter(test_set)
@@ -61,8 +61,8 @@ def main(params):
 
 
 if __name__ == '__main__':
-    from loader import Loader 
+    from loader import load_params
     from arguments import parser
-    params = Loader(parser.parse_args())
+    params = load_params('checkpoint/params_{}.json'.format(parser.parse_args().name))
     main(params)
 
