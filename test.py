@@ -11,10 +11,6 @@ from model import MACNetwork
 
 def main(params):
 
-    if params.checkpoint_path is None:
-        print('Checkpoint required for testing.')
-        raise ValueError
-
     test_set = DataLoader(
         CLEVR(sys.argv[1], 'val', transform=None),
         batch_size=params.batch_size,
@@ -23,8 +19,8 @@ def main(params):
     )
 
     with open('data/dic.pkl', 'rb') as f:
-            dic = pickle.load(f)
-        n_words = len(dic['word_dic']) + 1
+        dic = pickle.load(f)
+    n_words = len(dic['word_dic']) + 1
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     net = MACNetwork(n_words, params.dim, embed_hidden=params.embed_hidden,
             max_step=params.max_step, self_attention=params.self_attention,
