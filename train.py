@@ -117,7 +117,7 @@ def main(params):
             config={k: v for k, v in params.__dict__.items() if isinstance(v, (float, int, str, list))}
         )
     
-    with open('data/dic.pkl', 'rb') as f:
+    with open(params.dataset_root + '/dic.pkl', 'rb') as f:
         dic = pickle.load(f)
 
     n_words = len(dic['vocab']) + 1
