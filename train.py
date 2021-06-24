@@ -120,8 +120,8 @@ def main(params):
     with open('data/dic.pkl', 'rb') as f:
         dic = pickle.load(f)
 
-    n_words = len(dic['word_dic']) + 1
-    n_answers = len(dic['answer_dic'])
+    n_words = len(dic['vocab']) + 1
+    n_answers = len(dic['answers'])
 
     net = MACNetwork(n_words, params.dim, embed_hidden=params.embed_hidden,
         max_step=params.max_step, self_attention=params.self_attention,
